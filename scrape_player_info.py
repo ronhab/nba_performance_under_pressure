@@ -40,17 +40,24 @@ class PlayerScraper():
         url = 'https://www.basketball-reference.com/search/search.fcgi?hint={0}&search={0}&pid=&idx='.format(player_name_encoded)
         print('url={0}'.format(url))
         self.get_page(url)
-        too_many_results = True
-        try:
-            self.driver.find_element_by_class_name('search-results')
-        except NoSuchElementException:
-            too_many_results = False
-        if too_many_results:
-            search_results_name = self.driver.find_elements_by_class_name('search-item-name')
-            search_results_url = self.driver.find_elements_by_class_name('search-item-url')
-            player_desc = search_results_name[0].text.replace('\n','\t')
-            player_url = 'https://www.basketball-reference.com' + search_results_url[0].text
-            print('{0} {1}'.format(player_desc, player_url))
+        if 'Search Results' in self.driver.title:
+            if 'Found 0 hits that match your search' in self.driver.find_element_by_id('content').text:
+                player_name_tokens = player_name.split(' ')
+                if len(player_name_tokens) > 2:
+                    player_name = ' '.join(player_name_tokens[:-1])
+                    return self.get_player_info(player_name)
+                else:
+                    return None
+            else:
+                self.driver.find_element_by_class_name('search-results')
+                search_results_name = self.driver.find_elements_by_class_name('search-item-name')
+                search_results_url = self.driver.find_elements_by_class_name('search-item-url')
+                player_desc = search_results_name[0].text.replace('\n','\t')
+                player_url = 'https://www.basketball-reference.com' + search_results_url[0].text
+                print('{0} {1}'.format(player_desc, player_url))
+                self.get_page(player_url)
+        if 'https://www.basketball-reference.com/players' not in self.driver.current_url:
+            player_url = self.driver.find_element_by_link_text('Full Record').get_attribute('href')
             self.get_page(player_url)
         seasons = self.driver.find_element_by_id('totals').find_elements_by_class_name('full_table')
         all_stats = []
