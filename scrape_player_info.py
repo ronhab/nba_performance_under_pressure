@@ -7,10 +7,11 @@ from random import randint
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.common.exceptions import NoSuchElementException
+import pandas as pd
 import os
 
 class PlayerScraper():
-    stats_names = ['Season','Age','Tm','Lg','Pos','G','GS','MP','FG','FGA','FG%','3P','3PA','3P%','2P','2PA','2P%','eFG%','FT','FTA','FT%','ORB','DRB','TRB','AST','STL','BLK','TOV','PF','PTS']
+    stats_names = ['Age','Tm','Lg','Pos','G','GS','MP','FG','FGA','FG%','3P','3PA','3P%','2P','2PA','2P%','eFG%','FT','FTA','FT%','ORB','DRB','TRB','AST','STL','BLK','TOV','PF','PTS']
 
     # Open headless chromedriver
     def start_driver(self):
@@ -51,26 +52,56 @@ class PlayerScraper():
             player_url = 'https://www.basketball-reference.com' + search_results_url[0].text
             print('{0} {1}'.format(player_desc, player_url))
             self.get_page(player_url)
-        sessions = self.driver.find_element_by_id('totals').find_elements_by_class_name('full_table')
+        seasons = self.driver.find_element_by_id('totals').find_elements_by_class_name('full_table')
         all_stats = []
-        last_session = 0
-        acc_active_sessions = 0
-        for session in sessions:
-            stats = session.text.split(' ')
-            session_stats = {}
+        last_season = 0
+        acc_active_seasons = 0
+        for season in seasons:
+            season_name = season.find_element_by_tag_name('th').text
+            stats = season.find_elements_by_tag_name('td')
+            if len(stats) != len(self.stats_names):
+                raise Exception('player {0} season {1}'.format(player_name, season_name))
+            season_stats = {}
+            season_stats['Season'] = season_name
             for i in range(len(stats)):
-                session_stats[self.stats_names[i]] = stats[i]
-            session_stats['SeasonYear'] = int(session_stats['Season'].split('-')[0])
-            session_stats['AccActiveSeasons'] = acc_active_sessions
-            if session_stats['SeasonYear'] <= last_session:
-                raise Exception('Current season number ({0}) is not greater than previous ({1})'.format(session_stats['SeasonYear'], last_session))
-            last_session = session_stats['SeasonYear']
-            acc_active_sessions += 1
-            all_stats.append(session_stats)
+                stat_text = stats[i].text
+                if len(stat_text) > 0 and stat_text[0] == '.':
+                    stat_text = '0' + stat_text
+                season_stats[self.stats_names[i]] = stat_text
+            season_stats['Player'] = player_name
+            season_stats['SeasonYear'] = int(season_name.split('-')[0])
+            season_stats['AccActiveSeasons'] = acc_active_seasons
+            if season_stats['SeasonYear'] <= last_season:
+                raise Exception('Current season number ({0}) is not greater than previous ({1})'.format(season_stats['SeasonYear'], last_season))
+            last_season = season_stats['SeasonYear']
+            acc_active_seasons += 1
+            all_stats.append(season_stats)
         return all_stats
-    
+
+ft_dataset = pd.read_csv('free_throws.csv')
+all_players = set(ft_dataset.player.unique())
+start_from_scratch = os.path.exists('player_stats.csv') == False
+if not start_from_scratch:
+    player_dataset = pd.read_csv('player_stats.csv')
+    all_players.difference_update(set(player_dataset.Player.unique()))
+print('total players to scrape: {0}'.format(len(all_players)))
 scraper = PlayerScraper()
 scraper.start_driver()
-print(scraper.get_player_info('Michael Jordan'))
-print(scraper.get_player_info('Omri Casspi'))
+for player in all_players:
+    player_stats = scraper.get_player_info(player)
+    with open('player_stats.csv','a', encoding='utf-8') as player_stats_file:
+        if start_from_scratch:
+            header = ''
+            for stat_name in player_stats[0].keys():
+                header += '{0},'.format(stat_name)
+            header = header[:-1]
+            player_stats_file.write(header+'\n')
+            start_from_scratch = False
+        for season_stats in player_stats:
+            line = ''
+            for stat in season_stats.values():
+                line += '{0},'.format(stat)
+            line = line[:-1]
+            player_stats_file.write(line+'\n')
+    print('Player {0} - done!'.format(player))
 scraper.close_driver()
