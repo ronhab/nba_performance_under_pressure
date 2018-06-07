@@ -83,7 +83,7 @@ class PlayerScraper():
                     not_the_same_name_indexes = set()
                     player_first_name = player_name.split(' ')[0]
                     for i in possible_player_indexes:
-                        possible_player_first_name = search_results_name[i].split(' ')[0]
+                        possible_player_first_name = search_results_name[i].text.split(' ')[0]
                         if player_first_name != possible_player_first_name:
                             logging.info('filtering by player first name - removing {0}'.format(possible_player_first_name))
                             not_the_same_name_indexes.add(i)
