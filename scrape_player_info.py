@@ -6,6 +6,7 @@ from selenium.common.exceptions import NoSuchElementException
 import pandas as pd
 import os
 import logging
+import sys
 
 logging.basicConfig(filename='log.txt',level=logging.INFO)
 
@@ -89,8 +90,17 @@ class PlayerScraper():
                             not_the_same_name_indexes.add(i)
                     possible_player_indexes.difference_update(not_the_same_name_indexes)
                     if len(possible_player_indexes) > 1:
-                        logging.error('ambiguous player {0}'.format(player_name))
-                        return None
+                        not_the_same_name_indexes = set()
+                        player_last_name = player_name.split(' ')[1]
+                        for i in possible_player_indexes:
+                            possible_player_last_name = search_results_name[i].text.split(' ')[1]
+                            if player_last_name != possible_player_last_name:
+                                logging.info('filtering by player last name - removing {0}'.format(possible_player_last_name))
+                                not_the_same_name_indexes.add(i)
+                        possible_player_indexes.difference_update(not_the_same_name_indexes)
+                        if len(possible_player_indexes) > 1:
+                            logging.error('ambiguous player {0}'.format(player_name))
+                            return None
                 correct_index = possible_player_indexes.pop()
                 player_desc = search_results_name[correct_index].text.replace('\n','\t')
                 player_url = 'https://www.basketball-reference.com' + search_results_url[correct_index].text
@@ -131,6 +141,38 @@ class PlayerScraper():
         logging.info('Finished parsing player info for player {0}'.format(player_name))
         return all_stats
 
+    def get_player_info_explicit_name_and_url(self, player_name, player_url):
+        logging.info('Getting player info for player {0}'.format(player_name))
+        self.get_page(player_url)
+        seasons = self.driver.find_element_by_id('totals').find_elements_by_class_name('full_table')
+        all_stats = []
+        last_season = 0
+        acc_active_seasons = 0
+        for season in seasons:
+            season_name = season.find_element_by_tag_name('th').text
+            stats = season.find_elements_by_tag_name('td')
+            if len(stats) != len(self.stats_names):
+                logging.error('Error when parsing player stats: player {0} season {1}'.format(player_name, season_name))
+                return None
+            season_stats = {}
+            season_stats['Season'] = season_name
+            for i in range(len(stats)):
+                stat_text = stats[i].text
+                if len(stat_text) > 0 and stat_text[0] == '.':
+                    stat_text = '0' + stat_text
+                season_stats[self.stats_names[i]] = stat_text
+            season_stats['Player'] = player_name
+            season_stats['PlayerUrl'] = self.driver.current_url
+            season_stats['SeasonYear'] = int(season_name.split('-')[0])
+            season_stats['AccActiveSeasons'] = acc_active_seasons
+            if season_stats['SeasonYear'] <= last_season:
+                raise Exception('Current season number ({0}) is not greater than previous ({1})'.format(season_stats['SeasonYear'], last_season))
+            last_season = season_stats['SeasonYear']
+            acc_active_seasons += 1
+            all_stats.append(season_stats)
+        logging.info('Finished parsing player info for player {0}'.format(player_name))
+        return all_stats
+
 ft_dataset = pd.read_csv('free_throws.csv', encoding='utf-8')
 all_players = set(ft_dataset.player.unique())
 start_from_scratch = os.path.exists('player_stats.csv') == False
@@ -140,24 +182,47 @@ if not start_from_scratch:
 print('total players to scrape: {0}'.format(len(all_players)))
 scraper = PlayerScraper()
 scraper.start_driver()
-for player in all_players:
-    player_stats = scraper.get_player_info(player)
-    if player_stats == None:
-        print('Player {0} - no stats for you!'.format(player))
-        continue
-    with open('player_stats.csv','a', encoding='utf-8') as player_stats_file:
-        if start_from_scratch:
-            header = ''
-            for stat_name in player_stats[0].keys():
-                header += '{0},'.format(stat_name)
-            header = header[:-1]
-            player_stats_file.write(header+'\n')
-            start_from_scratch = False
-        for season_stats in player_stats:
-            line = ''
-            for stat in season_stats.values():
-                line += '{0},'.format(stat)
-            line = line[:-1]
-            player_stats_file.write(line+'\n')
-    print('Player {0} - done!'.format(player))
+manual_mode = len(sys.argv)>1 and sys.argv[1] == 'manual'
+if manual_mode:
+    for player in all_players:
+        print(player)
+    print('')
+    while True:
+        player_name = input('enter player name: ')
+        if player_name == '':
+            break
+        player_url = input('enter player URL: ')
+        player_stats = scraper.get_player_info_explicit_name_and_url(player_name, player_url)
+        if player_stats == None:
+            print('Player {0} - no stats for you!'.format(player))
+            continue
+        with open('player_stats.csv','a', encoding='utf-8') as player_stats_file:
+            for season_stats in player_stats:
+                line = ''
+                for stat in season_stats.values():
+                    line += '{0},'.format(stat)
+                line = line[:-1]
+                player_stats_file.write(line+'\n')
+        print('Player {0} - done!'.format(player_name))
+else:
+    for player in all_players:
+        player_stats = scraper.get_player_info(player)
+        if player_stats == None:
+            print('Player {0} - no stats for you!'.format(player))
+            continue
+        with open('player_stats.csv','a', encoding='utf-8') as player_stats_file:
+            if start_from_scratch:
+                header = ''
+                for stat_name in player_stats[0].keys():
+                    header += '{0},'.format(stat_name)
+                header = header[:-1]
+                player_stats_file.write(header+'\n')
+                start_from_scratch = False
+            for season_stats in player_stats:
+                line = ''
+                for stat in season_stats.values():
+                    line += '{0},'.format(stat)
+                line = line[:-1]
+                player_stats_file.write(line+'\n')
+        print('Player {0} - done!'.format(player))
 scraper.close_driver()
