@@ -57,7 +57,7 @@ class PlayerScraper():
                 search_results_name = players_element.find_elements_by_class_name('search-item-name')
                 search_results_url = players_element.find_elements_by_class_name('search-item-url')
                 logging.info('Search returned {0} possible players'.format(len(search_results_name)))
-                possible_player_indexes = []
+                possible_player_indexes = set()
                 for i,possible_player in enumerate(search_results_name):
                     logging.info('Trying player {0}: {1}'.format(i, possible_player.text))
                     first_par = possible_player.text.find('(')
@@ -71,7 +71,7 @@ class PlayerScraper():
                             last_season = 3000 # player is still active, I guess he will retire till year 3000...
                         if first_season <= 2016 and last_season >= 2006:
                             logging.info('Player sessions are in the valid range: {0}-{1}'.format(first_season, last_season))
-                            possible_player_indexes.append(i)
+                            possible_player_indexes.add(i)
                         else:
                             logging.warning('Player sessions are not in the valid range: {0}-{1}'.format(first_season, last_season))
                     else:
@@ -80,10 +80,20 @@ class PlayerScraper():
                     logging.error('Could not find player {0}'.format(player_name))
                     return None
                 if len(possible_player_indexes) > 1:
-                    logging.error('ambiguous player {0}'.format(player_name))
-                    return None
-                player_desc = search_results_name[possible_player_indexes[0]].text.replace('\n','\t')
-                player_url = 'https://www.basketball-reference.com' + search_results_url[possible_player_indexes[0]].text
+                    not_the_same_name_indexes = set()
+                    player_first_name = player_name.split(' ')[0]
+                    for i in possible_player_indexes:
+                        possible_player_first_name = search_results_name[i].split(' ')[0]
+                        if player_first_name != possible_player_first_name:
+                            logging.info('filtering by player first name - removing {0}'.format(possible_player_first_name))
+                            not_the_same_name_indexes.add(i)
+                    possible_player_indexes.difference_update(not_the_same_name_indexes)
+                    if len(possible_player_indexes) > 1:
+                        logging.error('ambiguous player {0}'.format(player_name))
+                        return None
+                correct_index = possible_player_indexes.pop()
+                player_desc = search_results_name[correct_index].text.replace('\n','\t')
+                player_url = 'https://www.basketball-reference.com' + search_results_url[correct_index].text
                 logging.info('selected player: {0} {1}'.format(player_desc, player_url))
                 self.get_page(player_url)
         if 'https://www.basketball-reference.com/players' not in self.driver.current_url:
@@ -134,6 +144,7 @@ for player in all_players:
     player_stats = scraper.get_player_info(player)
     if player_stats == None:
         print('Player {0} - no stats for you!'.format(player))
+        continue
     with open('player_stats.csv','a', encoding='utf-8') as player_stats_file:
         if start_from_scratch:
             header = ''
