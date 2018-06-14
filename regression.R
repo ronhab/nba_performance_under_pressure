@@ -6,8 +6,8 @@ df$last45 <- df$seconds_left > 30 & df$seconds_left <= 45
 df$last60 <- df$seconds_left > 45 & df$seconds_left <= 60
 df$score_diff<-factor(df$score_difference,levels=c('bigDiff',c(-5:5)),ordered=FALSE)
 df$score_diff[is.na(df$score_diff)]<-'bigDiff'
-df$prev_season_year<-as.numeric(sapply(strsplit(as.character(df$season),' - '),'[',1)) - 1
-df$exp_years_factor<-cut(df$exp_years, breaks=c(-1,1,5,10,20), labels=c('1','2','3','4'))
+df$season_year<-as.numeric(sapply(strsplit(as.character(df$season),' - '),'[',1))
+df$prev_season_year<-df$season_year - 1
 
 stats_df <- read.csv('player_stats.csv')
 stats_df <- stats_df[c('Player','SeasonYear','FT','FTA','FT.')]
@@ -61,15 +61,42 @@ for (i in c(3:11))
   lines(x_data, y_data[i,])
 }
 
-logit_model <- glm(shot_made ~ FTPerc + last30full*score_diff + exp_years, data = df, family = "binomial")
+frame()
+par(mfrow=c(1,1))
+df$exp_years_factor<-cut(df$exp_years, breaks=c(1:11,20), right=FALSE)
+high_pressure <- df[df$seconds_left<=30 & df$score_difference>=-3 & df$score_difference<=3,]
+exp_years_perf_diff<-by(high_pressure, high_pressure$exp_years_factor, FUN = function(x) binom.test(x=sum(x$shot_made), n=length(x$shot_made), p=mean(x$FTPerc), alternative='less'))
+means<-as.numeric(sapply(exp_years_perf_diff,'[','estimate'))-as.numeric(sapply(exp_years_perf_diff,'[','null.value'))
+pvalues<-as.numeric(sapply(exp_years_perf_diff,'[','p.value'))
+colors=rep('red',length(means))
+colors[pvalues > 0.05] <- 'gray'
+barplot(means,col=colors, axes=FALSE, xlab='Seasons in NBA', ylab='FT% difference', ylim=c(-0.06,0.01), names.arg=c(as.character(c(1:10)), '11+'))
+axis(2, at=seq(-0.06,0.01,by=0.01), labels=seq(-6,1,1))
+legend('bottom', legend=c('p<0.05','p>0.05'),col=c('red','gray'), pch=15)
+
+high_pressure <- df[df$seconds_left<=30 & df$score_difference>=-3 & df$score_difference<=3,]
+pressure_shots<-aggregate(shot_made ~ player + season_year, data=high_pressure, FUN=function(x) attempts=length(x))
+high_pressure<-merge(high_pressure,pressure_shots,by.x=c('player','prev_season_year'),by.y=c('player','season_year'),all=FALSE)
+high_pressure$shot_made.y[is.na(high_pressure$shot_made.y)]<-0
+high_pressure$pressure_attempts<-cut(high_pressure$shot_made.y, breaks=c(0,5,10,15,40), right=FALSE)
+
+frame()
+par(mfrow=c(1,1))
+pressure_attempts_perf_diff<-by(high_pressure, high_pressure$pressure_attempts, FUN = function(x) binom.test(x=sum(x$shot_made.x), n=length(x$shot_made.x), p=mean(x$FTPerc), alternative='less'))
+means<-as.numeric(sapply(pressure_attempts_perf_diff,'[','estimate'))-as.numeric(sapply(pressure_attempts_perf_diff,'[','null.value'))
+pvalues<-as.numeric(sapply(pressure_attempts_perf_diff,'[','p.value'))
+colors=rep('red',length(means))
+colors[pvalues > 0.05] <- 'gray'
+barplot(means,col=colors, axes=FALSE, xlab='Attempts under Pressure in previous season', ylab='FT% difference', ylim=c(-0.06,0.01), names.arg=c('[0-5)','[5-10)','[10-15)','15+'))
+axis(2, at=seq(-0.06,0.01,by=0.01), labels=seq(-6,1,1))
+legend('bottom', legend=c('p<0.05','p>0.05'),col=c('red','gray'), pch=15)
+
+
+logit_model <- glm(shot_made.x ~ shot_made.y, data = high_pressure, family = "binomial")
 summary(logit_model)
+
 
 # need to test for significancy of each regression block
 
-high_pressure <- df[df$seconds_left<=30 & df$score_difference>=-3 & df$score_difference<=3,]
-anova_model <- aov(shot_made ~ exp_years_factor, data=high_pressure)
-summary(anova_model)
-TukeyHSD(anova_model)
-means <- by(high_pressure,high_pressure$exp_years_factor,FUN=function(x) mean(x$shot_made))
-
-
+logit_model <- glm(shot_made ~ FTPerc + last30full*score_diff + exp_years, data = df, family = "binomial")
+summary(logit_model)
