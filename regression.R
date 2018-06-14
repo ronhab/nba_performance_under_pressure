@@ -7,6 +7,7 @@ df$last60 <- df$seconds_left > 45 & df$seconds_left <= 60
 df$score_diff<-factor(df$score_difference,levels=c('bigDiff',c(-5:5)),ordered=FALSE)
 df$score_diff[is.na(df$score_diff)]<-'bigDiff'
 df$prev_season_year<-as.numeric(sapply(strsplit(as.character(df$season),' - '),'[',1)) - 1
+df$exp_years_factor<-cut(df$exp_years, breaks=c(-1,1,5,10,20), labels=c('1','2','3','4'))
 
 stats_df <- read.csv('player_stats.csv')
 stats_df <- stats_df[c('Player','SeasonYear','FT','FTA','FT.')]
@@ -64,3 +65,11 @@ logit_model <- glm(shot_made ~ FTPerc + last30full*score_diff + exp_years, data 
 summary(logit_model)
 
 # need to test for significancy of each regression block
+
+high_pressure <- df[df$seconds_left<=30 & df$score_difference>=-3 & df$score_difference<=3,]
+anova_model <- aov(shot_made ~ exp_years_factor, data=high_pressure)
+summary(anova_model)
+TukeyHSD(anova_model)
+means <- by(high_pressure,high_pressure$exp_years_factor,FUN=function(x) mean(x))
+
+
