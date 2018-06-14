@@ -70,6 +70,6 @@ high_pressure <- df[df$seconds_left<=30 & df$score_difference>=-3 & df$score_dif
 anova_model <- aov(shot_made ~ exp_years_factor, data=high_pressure)
 summary(anova_model)
 TukeyHSD(anova_model)
-means <- by(high_pressure,high_pressure$exp_years_factor,FUN=function(x) mean(x))
+means <- by(high_pressure,high_pressure$exp_years_factor,FUN=function(x) mean(x$shot_made))
 
 
