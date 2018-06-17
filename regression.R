@@ -44,8 +44,27 @@ perf15 <- performance_diff_summary(df[df$last15 & df$score_difference >= -5 & df
 
 y_data = cbind(perf60$difference,perf45$difference,perf30$difference,perf15$difference)
 significancy = cbind(perf60['Sig. Level'],perf45['Sig. Level'],perf30['Sig. Level'],perf15['Sig. Level'])
-par(mfrow=c(3,3))
-for (i in c(3:11))
+
+par(mfrow=c(2,2))
+for (i in c(3:6))
+{
+    x_data = c(-60, -45, -30, -15)
+    colors = as.character(significancy[i,])
+    colors[colors=='1'] <- 'red'
+    colors[colors=='2'] <- 'orange'
+    colors[colors=='3'] <- 'yellow'
+    colors[colors=='4'] <- 'white'
+    colors[colors=='5'] <- 'white'
+    plot(x_data, y_data[i,],axes=FALSE,xlim=c(-60, -15),ylim=c(-0.11,0.11),xlab='Seconds Left',ylab='FT% difference',main=paste('Score Difference=',as.character(perf60$score_diff[i])),pch=19,col=colors)
+    axis(1, at=c(-60, -45, -30, -15), labels=c('60','45','30','15'))
+    axis(2, at=seq(-0.1,0.1,by=0.01), labels=seq(-10,10,1))
+    legend('topright',legend=c('p<0.001','p<0.01','p<0.05'),pch=19,col=c('red','orange','yellow'),cex=0.9,pt.cex=0.9, bty='n')
+    lines(x_data, y_data[i,])
+}
+
+dev.new()
+par(mfrow=c(2,2))
+for (i in c(7:10))
 {
     x_data = c(-60, -45, -30, -15)
     colors = as.character(significancy[i,])
