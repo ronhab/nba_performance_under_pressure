@@ -101,7 +101,9 @@ high_pressure$pressure_attempts_perc<-high_pressure$pressure_attempts_made / hig
 run_binom_test_on_stats(high_pressure, 'pressure_attempts_factor', c('[0-5)','[5-10)','[10-15)','[15-20)','20+'), 'Attempts under Pressure in previous season')
 
 library(data.table)
-dt = data.table(read.csv('free_throws.csv'))
+dt <- data.table(read.csv('free_throws.csv'))
+dt<-dt[,season_year:=as.numeric(sapply(strsplit(as.character(season),' - '),'[',1))]
+dt<-dt[,prev_season_year:=season_year-1]
 dt<-dt[, shot_index:=cumsum(shot_made + (1-shot_made)), by = .(game_id, player)]
 dt<-dt[, made_index:=cumsum(shot_made), by = .(game_id, player)]
 dt<-dt[, miss_index:=cumsum(1-shot_made), by = .(game_id, player)]
@@ -112,10 +114,7 @@ dt<-dt[seconds_left <= 30 & score_difference >= -3 & score_difference <= 3, pres
 dt<-dt[seconds_left <= 30 & score_difference >= -3 & score_difference <= 3, pressure_miss_index:=cumsum(1-shot_made), by = .(game_id, player)]
 dt<-dt[seconds_left <= 30 & score_difference >= -3 & score_difference <= 3, pressure_prev_throw:=shift(shot_made, 1, type = 'lag'), by = .(game_id, player)]
 
-dt_merged<-merge(dt[prev_throw==0,mean(shot_made),by=player],dt[prev_throw==1,mean(shot_made),by=player],by = "player")
-dt_merged[,avg_diff:=V1.y-V1.x]
-mean(dt_merged[,avg_diff])
-
-dt_merged<-merge(dt[pressure_prev_throw==0,mean(shot_made),by=player],dt[pressure_prev_throw==1,mean(shot_made),by=player],by = "player")
-dt_merged[,avg_diff:=V1.y-V1.x]
-mean(dt_merged[,avg_diff])
+stats_dt <- data.table(read.csv('player_stats.csv'))
+stats_dt <- stats_dt[,.(player=Player,season_year=SeasonYear,FT,FTA,FTPerc=FT.)]
+dt_merged <- merge(dt,stats_dt,by.x=c('player','prev_season_year'),by.y=c('player','season_year'),all=FALSE)
+dt_merged[!is.na(prev_throw) & !is.na(FTPerc),binom.test(x=sum(shot_made), n=length(shot_made), p=mean(FTPerc), alternative='less')]
