@@ -45,6 +45,7 @@ perf15 <- performance_diff_summary(df[df$last15 & df$score_difference >= -5 & df
 y_data = cbind(perf60$difference,perf45$difference,perf30$difference,perf15$difference)
 significancy = cbind(perf60['Sig. Level'],perf45['Sig. Level'],perf30['Sig. Level'],perf15['Sig. Level'])
 
+png(file='choking1.png', width=1000, height=1000)
 par(mfrow=c(2,2))
 for (i in c(3:6))
 {
@@ -61,8 +62,9 @@ for (i in c(3:6))
     legend('topright',legend=c('p<0.001','p<0.01','p<0.05'),pch=19,col=c('red','orange','yellow'),cex=0.9,pt.cex=0.9, bty='n')
     lines(x_data, y_data[i,])
 }
+dev.off()
 
-dev.new()
+png(file='choking2.png', width=1000, height=1000)
 par(mfrow=c(2,2))
 for (i in c(7:10))
 {
@@ -79,8 +81,7 @@ for (i in c(7:10))
     legend('topright',legend=c('p<0.001','p<0.01','p<0.05'),pch=19,col=c('red','orange','yellow'),cex=0.9,pt.cex=0.9, bty='n')
     lines(x_data, y_data[i,])
 }
-
-par(mfrow=c(1,1))
+dev.off()
 
 run_binom_test_on_stats <- function(data, column, labels, x_label)
 {
@@ -89,16 +90,20 @@ run_binom_test_on_stats <- function(data, column, labels, x_label)
     pvalues<-as.numeric(sapply(perf_diff,'[','p.value'))
     colors=rep('red',length(means))
     colors[pvalues > 0.05] <- 'gray'
-    dev.new()
+    png(file=paste(paste('effect', x_label, sep='_'),'png', sep='.'), width=1000, height=1000)
+    par(mfrow=c(1,1))
     barplot(means,col=colors, axes=FALSE, xlab=x_label, ylab='FT% difference', ylim=c(-0.06,0.01), names.arg=labels)
     axis(2, at=seq(-0.06,0.01,by=0.01), labels=seq(-6,1,1))
     legend('bottom', legend=c('p<0.05','p>0.05'),col=c('red','gray'), pch=15)
+    dev.off()
 }
 
 df$exp_years_factor<-cut(df$exp_years, breaks=c(1:11,20), right=FALSE)
+df$age_factor<-cut(df$Age, breaks=c(20:35,50), right=FALSE)
 high_pressure <- df[df$seconds_left<=30 & df$score_difference>=-3 & df$score_difference<=3,]
 
 run_binom_test_on_stats(high_pressure, 'exp_years_factor', c(as.character(c(1:10)), '11+'), 'Seasons in NBA')
+run_binom_test_on_stats(high_pressure, 'age_factor', c(as.character(c(20:34)), '35+'), 'Player Age')
 
 high_pressure <- df[df$seconds_left<=30 & df$score_difference>=-3 & df$score_difference<=3,]
 pressure_shots<-aggregate(shot_made ~ player + season_year, data=high_pressure, FUN=function(x) attempts=length(x))
@@ -133,6 +138,9 @@ dt<-dt[seconds_left <= 30 & score_difference >= -3 & score_difference <= 3, pres
 dt<-dt[seconds_left <= 30 & score_difference >= -3 & score_difference <= 3, pressure_miss_shots:=shift(cumsum(1-shot_made), 1, 'lag'), by = .(game_id, player)]
 dt<-dt[seconds_left <= 30 & score_difference >= -3 & score_difference <= 3, pressure_prev_throw:=shift(shot_made, 1, type = 'lag'), by = .(game_id, player)]
 
+dt$pressure_made_shots[is.na(dt$pressure_made_shots)]<-0
+dt$pressure_miss_shots[is.na(dt$pressure_miss_shots)]<-0
+
 stats_dt <- data.table(read.csv('player_stats.csv'))
 stats_dt <- stats_dt[,.(player=Player,season_year=SeasonYear,FT,FTA,FTPerc=FT.)]
 dt_merged <- merge(dt,stats_dt,by.x=c('player','prev_season_year'),by.y=c('player','season_year'),all=FALSE)
@@ -148,10 +156,11 @@ run_binom_test_on_stats_dt <- function(data_table, column, labels, x_label, y_li
     pvalues<-perf_diff[,'p.value']
     colors=rep('red',length(means))
     colors[pvalues > 0.05] <- 'gray'
-    dev.new()
+    png(file=paste(paste('effect', x_label, sep='_'),'png', sep='.'), width=1000, height=1000)
     barplot(means,col=colors, axes=FALSE, xlab=x_label, ylab='FT% difference', ylim=y_limit, names.arg=labels)
     axis(2, at=seq(y_limit[1],y_limit[2],by=0.01), labels=seq(y_limit[1]*100,y_limit[2]*100,1))
     legend('bottom', legend=c('p<0.05','p>0.05'),col=c('red','gray'), pch=15)
+    dev.off()
 }
 
 run_binom_test_text_output_dt <- function(data_table, column)
@@ -171,7 +180,13 @@ run_binom_test_on_stats_dt(dt_high_pressure,'pressure_shot_index_factor',c('0','
 run_binom_test_text_output_dt(dt_high_pressure, 'pressure_shot_index_factor')
 run_binom_test_text_output_dt(dt_high_pressure, 'pressure_miss_shots_factor')
 run_binom_test_text_output_dt(dt_high_pressure, 'pressure_made_shots_factor')
-# run_binom_test_on_stats_dt(dt_high_pressure,'pressure_miss_shots_factor',c('0','1','2+'),'Number of Previous Missed Shots under Pressure (per-Game)')
-# run_binom_test_on_stats_dt(dt_high_pressure,'pressure_made_shots_factor',c('0','1','2+'),'Number of Previous Made Shots under Pressure (per-Game)')
+run_binom_test_on_stats_dt(dt_high_pressure,'pressure_miss_shots_factor',c('0','1','2+'),'Number of Previous Missed Shots under Pressure (per-Game)')
+run_binom_test_on_stats_dt(dt_high_pressure,'pressure_made_shots_factor',c('0','1','2+'),'Number of Previous Made Shots under Pressure (per-Game)')
 
-cor.test(dt_merged[,exp_years],dt_merged[,FTPerc])
+library(corrplot)
+colnames(high_pressure)[colnames(high_pressure)=='FTPerc'] <- 'FT% (baseline)'
+numeric_cols <- c('FT% (baseline)', 'seconds_left', 'score_difference', 'Age', 'exp_years', 'pressure_attempts', 'pressure_attempts_made', 'pressure_attempts_miss')
+M_cor<-cor(na.omit(high_pressure[, numeric_cols]))
+png(file="correlation_table.png",width=1000,height=1000)
+corrplot(M_cor, method="color", type="lower", addCoef.col = "black", col=colorRampPalette(c("red","white","blue"))(200), number.cex=1, tl.cex=1, tl.srt=45)
+dev.off()
