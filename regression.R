@@ -79,3 +79,99 @@ for (i in c(7:10))
     legend('topright',legend=c('p<0.001','p<0.01','p<0.05'),pch=19,col=c('red','orange','yellow'),cex=0.9,pt.cex=0.9, bty='n')
     lines(x_data, y_data[i,])
 }
+
+par(mfrow=c(1,1))
+
+run_binom_test_on_stats <- function(data, column, labels, x_label)
+{
+    perf_diff<-by(data, data[column], FUN = function(x) binom.test(x=sum(x$shot_made), n=length(x$shot_made), p=mean(x$FTPerc), alternative='less'))
+    means<-as.numeric(sapply(perf_diff,'[','estimate'))-as.numeric(sapply(perf_diff,'[','null.value'))
+    pvalues<-as.numeric(sapply(perf_diff,'[','p.value'))
+    colors=rep('red',length(means))
+    colors[pvalues > 0.05] <- 'gray'
+    dev.new()
+    barplot(means,col=colors, axes=FALSE, xlab=x_label, ylab='FT% difference', ylim=c(-0.06,0.01), names.arg=labels)
+    axis(2, at=seq(-0.06,0.01,by=0.01), labels=seq(-6,1,1))
+    legend('bottom', legend=c('p<0.05','p>0.05'),col=c('red','gray'), pch=15)
+}
+
+df$exp_years_factor<-cut(df$exp_years, breaks=c(1:11,20), right=FALSE)
+high_pressure <- df[df$seconds_left<=30 & df$score_difference>=-3 & df$score_difference<=3,]
+
+run_binom_test_on_stats(high_pressure, 'exp_years_factor', c(as.character(c(1:10)), '11+'), 'Seasons in NBA')
+
+high_pressure <- df[df$seconds_left<=30 & df$score_difference>=-3 & df$score_difference<=3,]
+pressure_shots<-aggregate(shot_made ~ player + season_year, data=high_pressure, FUN=function(x) attempts=length(x))
+high_pressure<-merge(high_pressure,pressure_shots,by.x=c('player','prev_season_year'),by.y=c('player','season_year'),all=FALSE)
+colnames(high_pressure)[colnames(high_pressure)=="shot_made.x"] <- "shot_made"
+colnames(high_pressure)[colnames(high_pressure)=="shot_made.y"] <- "pressure_attempts"
+high_pressure$pressure_attempts[is.na(high_pressure$pressure_attempts)]<-0
+high_pressure$pressure_attempts_factor<-cut(high_pressure$pressure_attempts, breaks=c(0,5,10,15,20,40), right=FALSE)
+pressure_shots_made<-aggregate(shot_made ~ player + season_year, data=high_pressure, FUN=function(x) attempts=sum(x))
+high_pressure<-merge(high_pressure,pressure_shots_made,by.x=c('player','prev_season_year'),by.y=c('player','season_year'),all=FALSE)
+colnames(high_pressure)[colnames(high_pressure)=="shot_made.x"] <- "shot_made"
+colnames(high_pressure)[colnames(high_pressure)=="shot_made.y"] <- "pressure_attempts_made"
+high_pressure$pressure_attempts_made[is.na(high_pressure$pressure_attempts_made)]<-0
+high_pressure$pressure_attempts_made_factor<-cut(high_pressure$pressure_attempts_made, breaks=c(0,5,10,15,40), right=FALSE)
+high_pressure$pressure_attempts_miss<-high_pressure$pressure_attempts - high_pressure$pressure_attempts_made
+high_pressure$pressure_attempts_miss_factor<-cut(high_pressure$pressure_attempts_miss, breaks=c(0,1,2,3,4,5,10), right=FALSE)
+high_pressure$pressure_attempts_perc<-high_pressure$pressure_attempts_made / high_pressure$pressure_attempts
+
+run_binom_test_on_stats(high_pressure, 'pressure_attempts_factor', c('[0-5)','[5-10)','[10-15)','[15-20)','20+'), 'Attempts under Pressure in previous season')
+
+library(data.table)
+dt <- data.table(read.csv('free_throws.csv'))
+dt<-dt[,season_year:=as.numeric(sapply(strsplit(as.character(season),' - '),'[',1))]
+dt<-dt[,prev_season_year:=season_year-1]
+dt<-dt[, shot_index:=cumsum(shot_made + (1-shot_made)), by = .(game_id, player)]
+dt<-dt[, made_index:=cumsum(shot_made), by = .(game_id, player)]
+dt<-dt[, miss_index:=cumsum(1-shot_made), by = .(game_id, player)]
+dt<-dt[, prev_throw:=shift(shot_made, 1, type = 'lag'), by = .(game_id, player)]
+
+dt<-dt[seconds_left <= 30 & score_difference >= -3 & score_difference <= 3, pressure_shot_index:=cumsum(shot_made + (1-shot_made)), by = .(game_id, player)]
+dt<-dt[seconds_left <= 30 & score_difference >= -3 & score_difference <= 3, pressure_made_shots:=shift(cumsum(shot_made), 1, 'lag'), by = .(game_id, player)]
+dt<-dt[seconds_left <= 30 & score_difference >= -3 & score_difference <= 3, pressure_miss_shots:=shift(cumsum(1-shot_made), 1, 'lag'), by = .(game_id, player)]
+dt<-dt[seconds_left <= 30 & score_difference >= -3 & score_difference <= 3, pressure_prev_throw:=shift(shot_made, 1, type = 'lag'), by = .(game_id, player)]
+
+stats_dt <- data.table(read.csv('player_stats.csv'))
+stats_dt <- stats_dt[,.(player=Player,season_year=SeasonYear,FT,FTA,FTPerc=FT.)]
+dt_merged <- merge(dt,stats_dt,by.x=c('player','prev_season_year'),by.y=c('player','season_year'),all=FALSE)
+
+run_binom_test_on_stats_dt <- function(data_table, column, labels, x_label, y_limit)
+{
+    if(missing(y_limit)) {
+        y_limit <- c(-0.06,0.01)
+    }
+    perf_diff<-data_table[,binom.test(x=sum(shot_made), n=length(shot_made), p=mean(FTPerc), alternative='less')[c('p.value','estimate','null.value')],by=column]
+    setorderv(perf_diff, c(column))
+    means<-perf_diff[,estimate-null.value]
+    pvalues<-perf_diff[,'p.value']
+    colors=rep('red',length(means))
+    colors[pvalues > 0.05] <- 'gray'
+    dev.new()
+    barplot(means,col=colors, axes=FALSE, xlab=x_label, ylab='FT% difference', ylim=y_limit, names.arg=labels)
+    axis(2, at=seq(y_limit[1],y_limit[2],by=0.01), labels=seq(y_limit[1]*100,y_limit[2]*100,1))
+    legend('bottom', legend=c('p<0.05','p>0.05'),col=c('red','gray'), pch=15)
+}
+
+run_binom_test_text_output_dt <- function(data_table, column)
+{
+    perf_diff<-data_table[,binom.test(x=sum(shot_made), n=length(shot_made), p=mean(FTPerc), alternative='less')[c('p.value','estimate','null.value')],by=column]
+    perf_diff[,avg_diff:=estimate-null.value]
+    setorderv(perf_diff, c(column))
+    print(perf_diff)
+}
+
+dt_high_pressure <- dt_merged[!is.na(prev_throw) & !is.na(FTPerc) & score_difference >= -3 & score_difference<=3 & seconds_left<=30]
+dt_high_pressure[,pressure_shot_index_factor:=cut(pressure_shot_index, breaks=c(1,2,3,10), right=FALSE)]
+dt_high_pressure[,pressure_miss_shots_factor:=cut(pressure_miss_shots, breaks=c(0,1,2,10), right=FALSE)]
+dt_high_pressure[,pressure_made_shots_factor:=cut(pressure_made_shots, breaks=c(0,1,2,10), right=FALSE)]
+# run_binom_test_on_stats_dt(dt_high_pressure,'prev_throw',c('miss','hit'),'Previous Throw')
+run_binom_test_on_stats_dt(dt_high_pressure,'pressure_shot_index_factor',c('0','1','2+'),'Number of Previous Shots under Pressure (per-Game)')
+run_binom_test_text_output_dt(dt_high_pressure, 'pressure_shot_index_factor')
+run_binom_test_text_output_dt(dt_high_pressure, 'pressure_miss_shots_factor')
+run_binom_test_text_output_dt(dt_high_pressure, 'pressure_made_shots_factor')
+# run_binom_test_on_stats_dt(dt_high_pressure,'pressure_miss_shots_factor',c('0','1','2+'),'Number of Previous Missed Shots under Pressure (per-Game)')
+# run_binom_test_on_stats_dt(dt_high_pressure,'pressure_made_shots_factor',c('0','1','2+'),'Number of Previous Made Shots under Pressure (per-Game)')
+
+cor.test(dt_merged[,exp_years],dt_merged[,FTPerc])
