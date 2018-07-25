@@ -1,3 +1,23 @@
+library(car)
+library(moments)
+library(data.table)
+library(corrplot)
+
+options(scipen=999)
+
+Mode <- function(x) 
+{
+    ux <- unique(x)
+    ux[which.max(tabulate(match(x, ux)))]
+}
+
+stats_summary <- function(x,row_name) 
+{
+    stat_row<-data.frame(mean=mean(x), median=median(x), Mode=Mode(x),sd=sd(x),variance=sd(x)^2,skewness=skewness(x),kurtosis=kurtosis(x),min=min(x),max=max(x),q25=quantile(x, .25),q50=quantile(x, .5),q75=quantile(x, .75))
+    row.names(stat_row)<-c(row_name)
+    stat_row
+}
+
 df <- read.csv('free_throws.csv')
 df$last15 <- df$seconds_left <= 15
 df$last30 <- df$seconds_left > 15 & df$seconds_left <= 30
@@ -14,6 +34,9 @@ stats_df <- stats_df[c('Player','SeasonYear','FT','FTA','FT.')]
 colnames(stats_df)[colnames(stats_df)=='FT.'] <- 'FTPerc'
 df<-merge(df,stats_df,by.x=c('player','prev_season_year'),by.y=c('Player','SeasonYear'),all=FALSE)
 df<-na.omit(df)
+
+# descriptive statistics
+rbind(stats_summary(df$score_difference,'Score Difference'),stats_summary(df$seconds_left,'Seconds Left'),stats_summary(df$Age,'Age'),stats_summary(df$exp_years,'Years of Experience'))
 
 performance_diff_summary <- function(under_pressure)
 {
@@ -124,7 +147,6 @@ high_pressure$pressure_attempts_perc<-high_pressure$pressure_attempts_made / hig
 
 run_binom_test_on_stats(high_pressure, 'pressure_attempts_factor', c('[0-5)','[5-10)','[10-15)','[15-20)','20+'), 'Attempts under Pressure in previous season')
 
-library(data.table)
 dt <- data.table(read.csv('free_throws.csv'))
 dt<-dt[,season_year:=as.numeric(sapply(strsplit(as.character(season),' - '),'[',1))]
 dt<-dt[,prev_season_year:=season_year-1]
@@ -183,10 +205,10 @@ run_binom_test_text_output_dt(dt_high_pressure, 'pressure_made_shots_factor')
 run_binom_test_on_stats_dt(dt_high_pressure,'pressure_miss_shots_factor',c('0','1','2+'),'Number of Previous Missed Shots under Pressure (per-Game)')
 run_binom_test_on_stats_dt(dt_high_pressure,'pressure_made_shots_factor',c('0','1','2+'),'Number of Previous Made Shots under Pressure (per-Game)')
 
-library(corrplot)
 colnames(high_pressure)[colnames(high_pressure)=='FTPerc'] <- 'FT% (baseline)'
 numeric_cols <- c('FT% (baseline)', 'seconds_left', 'score_difference', 'Age', 'exp_years', 'pressure_attempts', 'pressure_attempts_made', 'pressure_attempts_miss')
 M_cor<-cor(na.omit(high_pressure[, numeric_cols]))
 png(file="correlation_table.png",width=1000,height=1000)
 corrplot(M_cor, method="color", type="lower", addCoef.col = "black", col=colorRampPalette(c("red","white","blue"))(200), number.cex=1, tl.cex=1, tl.srt=45)
 dev.off()
+
