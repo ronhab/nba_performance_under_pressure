@@ -1,5 +1,0 @@
-Missing columns:
-1. baseline_all_shots - FT% over last 3 sessions (not including current session), including all shots
-2. baseline_no_pressure - FT% over last 3 sessions (not including current session), only including shots in no pressure situations (in first 3 periods of the game)
-3. exp_3years_FTA - FT attempts over last 3 years in pressure situations
-4. exp_3years_FT - FT made attempts over last 3 years in pressure situations
